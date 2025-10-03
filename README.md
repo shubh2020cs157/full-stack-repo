@@ -211,9 +211,6 @@ npm run security:scan
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📄 License
-
-This is a personal portfolio project for technical skills assessment. All rights reserved.
 
 ## 🎯 Skills Demonstrated
 
@@ -225,13 +222,5 @@ This is a personal portfolio project for technical skills assessment. All rights
 - **Cloud**: AWS ECS, Vercel, monitoring
 - **Security**: Vulnerability scanning, best practices
 - **Testing**: Unit, integration, performance, security
-
-## 📞 Contact
-
-**Shubh** - [@shubh2020cs157](https://github.com/shubh2020cs157)
-
-Project Link: [https://github.com/shubh2020cs157/full-stack-portfolio](https://github.com/shubh2020cs157/full-stack-portfolio)
-
----
 
 ⭐ **Star this repository if you found it helpful!**
