@@ -1,0 +1,45 @@
+{
+  "name": "forum-crud",
+  "version": "1.0.0",
+  "description": "A comprehensive Node.js/Express REST API for forum post management with PostgreSQL",
+  "main": "dist/app.js",
+  "scripts": {
+    "start": "node dist/app.js",
+    "dev": "nodemon src/app.ts",
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db:setup": "psql -U postgres -d forum_db -f sql/schema.sql",
+    "db:reset": "psql -U postgres -c 'DROP DATABASE IF EXISTS forum_db;' && psql -U postgres -c 'CREATE DATABASE forum_db;' && npm run db:setup"
+  },
+  "keywords": [
+    "forum",
+    "crud",
+    "api",
+    "express",
+    "postgresql",
+    "typescript",
+    "rest"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "packageManager": "pnpm@10.14.0",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "morgan": "^1.10.1",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/morgan": "^1.9.10",
+    "@types/pg": "^8.15.5",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

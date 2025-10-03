@@ -1,0 +1,49 @@
+{
+  "name": "performance-optimization",
+  "version": "1.0.0",
+  "description": "Comprehensive performance optimization solutions for slow API calls",
+  "main": "index.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "concurrently \"npm run backend:dev\" \"npm run frontend:dev\"",
+    "backend:dev": "nodemon backend/server.js",
+    "frontend:dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "test": "jest",
+    "test:performance": "node tests/performance-test.js",
+    "benchmark": "node tests/benchmark.js"
+  },
+  "keywords": [
+    "performance",
+    "optimization",
+    "api",
+    "caching",
+    "database",
+    "frontend",
+    "backend"
+  ],
+  "author": "Performance Optimization Expert",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "compression": "^1.7.4",
+    "redis": "^4.6.10",
+    "pg": "^8.11.3",
+    "pg-pool": "^3.6.1",
+    "node-cache": "^5.1.2",
+    "axios": "^1.6.2",
+    "dotenv": "^16.3.1",
+    "morgan": "^1.10.0",
+    "express-rate-limit": "^7.1.5",
+    "express-slow-down": "^2.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "concurrently": "^8.2.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "autocannon": "^7.12.0"
+  }
+}

@@ -1,0 +1,386 @@
+name: 🚀 CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: "18"
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # 🔍 Code Quality & Security
+  quality-checks:
+    name: 🔍 Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: 📦 Install dependencies
+        run: |
+          cd portfolio-builder && npm ci
+          cd ../forum-crud && npm ci
+          cd ../oauth-nextjs && npm ci
+          cd ../performance-optimization && npm ci
+
+      - name: 🔍 ESLint
+        run: |
+          cd portfolio-builder && npm run lint || true
+          cd ../oauth-nextjs && npm run lint || true
+
+      - name: 🛡️ Security Audit
+        run: |
+          cd portfolio-builder && npm audit --audit-level=high || true
+          cd ../forum-crud && npm audit --audit-level=high || true
+          cd ../oauth-nextjs && npm audit --audit-level=high || true
+          cd ../performance-optimization && npm audit --audit-level=high || true
+
+      - name: 🔒 CodeQL Analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: 🔒 CodeQL Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: 🔒 CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  # 🧪 Testing
+  test:
+    name: 🧪 Testing
+    runs-on: ubuntu-latest
+    needs: quality-checks
+    strategy:
+      matrix:
+        project:
+          [
+            portfolio-builder,
+            forum-crud,
+            oauth-nextjs,
+            performance-optimization,
+          ]
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: 📦 Install dependencies
+        working-directory: ${{ matrix.project }}
+        run: npm ci
+
+      - name: 🏗️ Build project
+        working-directory: ${{ matrix.project }}
+        run: |
+          if [ -f "package.json" ] && grep -q '"build"' package.json; then
+            npm run build
+          else
+            echo "No build script found, skipping..."
+          fi
+
+      - name: 🧪 Run tests
+        working-directory: ${{ matrix.project }}
+        run: |
+          if [ -f "package.json" ] && grep -q '"test"' package.json; then
+            npm test
+          else
+            echo "No test script found, skipping..."
+          fi
+
+      - name: 📊 Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: matrix.project == 'portfolio-builder'
+        with:
+          file: ./portfolio-builder/coverage/lcov.info
+          flags: portfolio-builder
+          name: portfolio-builder-coverage
+
+  # 🏗️ Build & Package
+  build:
+    name: 🏗️ Build & Package
+    runs-on: ubuntu-latest
+    needs: [quality-checks, test]
+    strategy:
+      matrix:
+        project:
+          [
+            portfolio-builder,
+            forum-crud,
+            oauth-nextjs,
+            performance-optimization,
+          ]
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🏗️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+
+      - name: 📦 Install dependencies
+        working-directory: ${{ matrix.project }}
+        run: npm ci
+
+      - name: 🏗️ Build project
+        working-directory: ${{ matrix.project }}
+        run: |
+          if [ -f "package.json" ] && grep -q '"build"' package.json; then
+            npm run build
+          else
+            echo "No build script found, skipping..."
+          fi
+
+      - name: 📦 Package artifacts
+        working-directory: ${{ matrix.project }}
+        run: |
+          mkdir -p ../artifacts/${{ matrix.project }}
+          if [ -d "dist" ]; then
+            cp -r dist/* ../artifacts/${{ matrix.project }}/
+          elif [ -d "build" ]; then
+            cp -r build/* ../artifacts/${{ matrix.project }}/
+          else
+            cp -r . ../artifacts/${{ matrix.project }}/
+          fi
+
+      - name: 📤 Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.project }}-build
+          path: artifacts/${{ matrix.project }}
+          retention-days: 7
+
+  # 🐳 Docker Build
+  docker-build:
+    name: 🐳 Docker Build
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push'
+    strategy:
+      matrix:
+        project: [forum-crud, performance-optimization]
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏷️ Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.project }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: 🏗️ Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./${{ matrix.project }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # 🚀 Deploy to Staging
+  deploy-staging:
+    name: 🚀 Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build, docker-build]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 🚀 Deploy Portfolio Builder to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_PORTFOLIO }}
+          working-directory: ./artifacts/portfolio-builder
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+      - name: 🚀 Deploy OAuth Next.js to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_OAUTH }}
+          working-directory: ./artifacts/oauth-nextjs
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+      - name: 🚀 Deploy to AWS ECS (Backend Services)
+        if: github.event_name == 'push'
+        run: |
+          echo "Deploying backend services to AWS ECS staging..."
+          # AWS ECS deployment commands would go here
+          # aws ecs update-service --cluster staging-cluster --service forum-crud --force-new-deployment
+          # aws ecs update-service --cluster staging-cluster --service performance-optimization --force-new-deployment
+
+      - name: 📢 Notify deployment
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          channel: "#deployments"
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # 🚀 Deploy to Production
+  deploy-production:
+    name: 🚀 Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build, docker-build]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 🚀 Deploy Portfolio Builder to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_PORTFOLIO }}
+          working-directory: ./artifacts/portfolio-builder
+          vercel-args: "--prod"
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+      - name: 🚀 Deploy OAuth Next.js to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_OAUTH }}
+          working-directory: ./artifacts/oauth-nextjs
+          vercel-args: "--prod"
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+      - name: 🚀 Deploy to AWS ECS (Backend Services)
+        if: github.event_name == 'push'
+        run: |
+          echo "Deploying backend services to AWS ECS production..."
+          # AWS ECS deployment commands would go here
+          # aws ecs update-service --cluster production-cluster --service forum-crud --force-new-deployment
+          # aws ecs update-service --cluster production-cluster --service performance-optimization --force-new-deployment
+
+      - name: 📢 Notify deployment
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          channel: "#deployments"
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # 🔄 Feature Branch Deployment
+  deploy-feature:
+    name: 🔄 Deploy Feature Branch
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request' && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/develop'
+    environment: preview
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 📥 Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 🚀 Deploy Feature Branch to Vercel
+        uses: amondnet/vercel-action@v25
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID_PORTFOLIO }}
+          working-directory: ./artifacts/portfolio-builder
+          vercel-args: "--target preview"
+          scope: ${{ secrets.VERCEL_ORG_ID }}
+
+      - name: 💬 Comment PR with preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && comment.body.includes('Preview URL')
+            );
+
+            const previewUrl = `https://${process.env.VERCEL_URL}`;
+            const body = `🚀 **Preview Deployment Ready!**
+
+            **Preview URL:** ${previewUrl}
+            **Branch:** ${context.ref.replace('refs/heads/', '')}
+            **Commit:** ${context.sha.substring(0, 7)}
+
+            This preview will be automatically updated when you push new commits to this branch.`;
+
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }
+

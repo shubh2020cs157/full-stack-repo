@@ -1,0 +1,24 @@
+# 🐳 Development Dockerfile for Portfolio Builder
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies
+RUN apk add --no-cache git
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Expose port
+EXPOSE 3005
+
+# Start development server
+CMD ["npm", "start"]
+
